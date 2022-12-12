@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
-import sys
+"""
+Execute SQL queries inside a Markdown document
+"""
+
 import psycopg
 import sqlparse
-from panflute import *
+import panflute as pf
 
 ##
 ## Constants
@@ -11,11 +14,17 @@ from panflute import *
 FILTER_NAME='pandoc-psql'
 
 
+# We don't open the global connection right away
+# Instead we wait until we find a least one `run-postgres`
+# code blocks in the doc
+GLOBAL_CONN = None
 
 def get_str_option(element, doc, tag, default):
-    options=None
-    if element: options=element.attributes
-    return get_option(  options=options,
+    """
+    Parse a string option
+    """
+    options=element.attributes if element else None
+    return pf.get_option(  options=options,
                         local_tag=tag,
                         doc=doc,
                         doc_tag=f"{FILTER_NAME}.{tag}",
@@ -23,6 +32,9 @@ def get_str_option(element, doc, tag, default):
                         error_on_none=False)
 
 def get_bool_option(element, doc, tag, default):
+    """
+    Parse a boolean option
+    """
     return get_str_option(  element,
                             doc,
                             tag,
@@ -30,25 +42,28 @@ def get_bool_option(element, doc, tag, default):
            ).lower() in ("yes", "true", "t", "1")
 
 def get_list_option(element, doc, tag, default, separator=','):
+    """
+    Parse a list option
+    """
     return get_str_option(element,doc,tag,default).split(separator)
 
-##
-## Psycopg Row Factory
-##
 def panflute_row_factory(cursor):
+    """
+    Psycopg Row Factory
+    """
     return get_panflute_row
 
 def get_panflute_cell(value):
     """
     Each value of the SQL row becomes a Markdown table cell
     """
-    return TableCell(Plain(Str(str(value))))
+    return pf.TableCell(pf.Plain(pf.Str(str(value))))
 
 def get_panflute_row(values):
     """
     Transform a SQL table tuple into a Markdown table row
     """
-    return TableRow(*[get_panflute_cell(v) for v in values])
+    return pf.TableRow(*[get_panflute_cell(v) for v in values])
 
 def get_panflute_table(conn, query, show_result):
     """
@@ -58,25 +73,33 @@ def get_panflute_table(conn, query, show_result):
         cur.execute(query)
         # if the query returns nothing, then cur.description is None
         if (show_result and cur.description):
-            column_names = TableRow(*[get_panflute_cell(i[0]) for i in cur.description])
+            column_names = pf.TableRow(*[get_panflute_cell(i[0]) for i in cur.description])
             cells = cur.fetchall()
-            return Table(   TableBody(*cells),
-                            head=TableHead(column_names),
-                            caption=Caption())
+            return pf.Table(   pf.TableBody(*cells),
+                            head=pf.TableHead(column_names),
+                            caption=pf.Caption())
     return None
 
 
 def action(options, data, element, doc):
+    """
+    For each `run-postgres` code block:
+        * run the query
+        * output the query as an SQL code block
+        * output the result as a table
+    """
 
     output = []
 
     ##
-    ## Options
+    ## Code Block parameters
+    ## /!\ do not confuse with `options`
     ##
-    classes=get_list_option(element, doc,"class", 'sql',' ')
-    parse_query=get_bool_option(element, doc,"parse_query", 'True')
-    show_query=get_bool_option(element, doc,"show_query", 'True')
-    show_result=get_bool_option(element, doc,"show_result", 'True')
+    params={}
+    params['classes']=get_list_option(element, doc,"class", 'sql',' ')
+    params['parse_query']=get_bool_option(element, doc,"parse_query", 'True')
+    params['show_query']=get_bool_option(element, doc,"show_query", 'True')
+    params['show_result']=get_bool_option(element, doc,"show_result", 'True')
 
     ##
     ## Connection info
@@ -97,42 +120,44 @@ def action(options, data, element, doc):
     ##
     ## Step 1 : Write the Query
     ##
-    if (show_query):
-        if (parse_query):
+    if params['show_query']:
+        if params['parse_query']:
             query = sqlparse.format(query, reindent=True, keyword_case="upper")
-        output.append(CodeBlock(query,classes=classes))
+        output.append(pf.CodeBlock(query,classes=params['classes']))
 
     ##
     ## Step 2 : Execute the Query and display the result
     ##
-    global doc_conn
+    global GLOBAL_CONN
     local_conn=None
     try:
         ## if at least one local param is provided
         ## then open a one-shot connection
-        conninfo=psycopg.conninfo.make_conninfo('',**local);
+        conninfo=psycopg.conninfo.make_conninfo('',**local)
         if conninfo:
             local_conn = psycopg.connect(conninfo,autocommit=True)
             conn = local_conn
 
         ## else use the global connection
         else:
-            if not doc_conn:
+            if not GLOBAL_CONN:
                 ## The global connection is not initialized,
                 ## read the PG ENV variables and open it
-                doc_conn = psycopg.connect(autocommit=True)
-            conn = doc_conn
+                GLOBAL_CONN = psycopg.connect(autocommit=True)
+            conn = GLOBAL_CONN
 
-        result=get_panflute_table(conn, query, show_result)
-        if result: output.append(result)
+        result=get_panflute_table(conn, query, params['show_result'])
+        if result:
+            output.append(result)
 
     except Exception as err:
-        div=Div(attributes={'class': 'warning'})
-        div.content=convert_text(f"pandoc-run-postgres: {err}")
+        div=pf.Div(attributes={'class': 'warning'})
+        div.content=pf.convert_text(f"pandoc-run-postgres: {err}")
         output.append(div)
 
     finally:
-        if local_conn: local_conn.close()
+        if local_conn:
+            local_conn.close()
 
     return output
 
@@ -142,6 +167,6 @@ if __name__ == "__main__":
     # We don't open the global connection right away
     # Instead we wait until we find a least one `run-postgres`
     # code blocks in the doc
-    doc_conn = None
-    run_filter(yaml_filter, tag='run-postgres', function=action)
-    if doc_conn: doc_conn.close()
+    pf.run_filter(pf.yaml_filter, tag='run-postgres', function=action)
+    if GLOBAL_CONN:
+        GLOBAL_CONN.close()

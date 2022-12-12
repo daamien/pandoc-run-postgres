@@ -1,0 +1,3 @@
+[MAIN]
+disable=global-statement,broad-except,unused-argument
+
