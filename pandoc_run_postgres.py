@@ -8,16 +8,24 @@ import psycopg
 import sqlparse
 import panflute as pf
 
-##
-## Constants
-##
-FILTER_NAME='pandoc-psql'
 
+def get_conninfo(element,doc):
+    """
+    Build a psycopg conninfo based on the element config
+    and the document config
 
-# We don't open the global connection right away
-# Instead we wait until we find a least one `run-postgres`
-# code blocks in the doc
-GLOBAL_CONN = None
+    NOTE: If the conninfo is incomplete, then the PG ENV variables
+    are used automatically.
+
+    PG_PASSWORD=xxx pandoc --filter=pandoc_run_postgres
+    """
+    dsn={}
+    dsn['dbname']=get_str_option(element, doc,"dbname", None)
+    dsn['user']=get_str_option(element, doc,"user", None)
+    dsn['password']=get_str_option(element, doc,"password", None)
+    dsn['host']=get_str_option(element, doc,"host", None)
+    dsn['port']=get_str_option(element, doc,"port", None)
+    return psycopg.conninfo.make_conninfo('',**dsn)
 
 def get_str_option(element, doc, tag, default):
     """
@@ -84,9 +92,9 @@ def get_panflute_table(conn, query, show_result):
 def action(options, data, element, doc):
     """
     For each `run-postgres` code block:
-        * run the query
-        * output the query as an SQL code block
-        * output the result as a table
+        * 1- output the query as an SQL code block
+        * 2- run the query
+        * 3- output the result as a table
     """
 
     output = []
@@ -100,19 +108,6 @@ def action(options, data, element, doc):
     params['parse_query']=get_bool_option(element, doc,"parse_query", 'True')
     params['show_query']=get_bool_option(element, doc,"show_query", 'True')
     params['show_result']=get_bool_option(element, doc,"show_result", 'True')
-
-    ##
-    ## Connection info
-    ##
-    ## This is used when user wants to overide the global connection
-    ## and open a separate ("local") connection for each codeblock
-    ##
-    local={}
-    local['dbname']=get_str_option(element, doc,"dbname", None)
-    local['user']=get_str_option(element, doc,"user", None)
-    local['password']=get_str_option(element, doc,"password", None)
-    local['host']=get_str_option(element, doc,"host", None)
-    local['port']=get_str_option(element, doc,"port", None)
 
     # In this case, `options` is not a dict, it's the actual SQL query
     query = str(options)
@@ -131,28 +126,36 @@ def action(options, data, element, doc):
     global GLOBAL_CONN
     local_conn=None
     try:
-        ## if at least one local param is provided
+        ## if at least one local param is provided in the element
         ## then open a one-shot connection
-        conninfo=psycopg.conninfo.make_conninfo('',**local)
+        conninfo=get_conninfo(element,doc)
         if conninfo:
-            local_conn = psycopg.connect(conninfo,autocommit=True)
+            local_conn = psycopg.connect(   conninfo,
+                                            application_name=FILTER_NAME,
+                                            autocommit=True)
             conn = local_conn
 
         ## else use the global connection
         else:
             if not GLOBAL_CONN:
                 ## The global connection is not initialized,
-                ## read the PG ENV variables and open it
-                GLOBAL_CONN = psycopg.connect(autocommit=True)
+                ## read the global config (not the element !) and open it
+                conninfo=get_conninfo(None,doc)
+                GLOBAL_CONN = psycopg.connect(  conninfo,
+                                                application_name=FILTER_NAME,
+                                                autocommit=True)
             conn = GLOBAL_CONN
 
+        ##
+        ## Step 3 - Output the result as a pandoc table
+        ##
         result=get_panflute_table(conn, query, params['show_result'])
         if result:
             output.append(result)
 
     except Exception as err:
         div=pf.Div(attributes={'class': 'warning'})
-        div.content=pf.convert_text(f"pandoc-run-postgres: {err}")
+        div.content=pf.convert_text(f"{FILTER_NAME}: {err}")
         output.append(div)
 
     finally:
@@ -162,11 +165,15 @@ def action(options, data, element, doc):
     return output
 
 
+#
+FILTER_NAME = 'run-postgres'
+
+# We don't open the global connection right away
+# Instead we wait until we find a least one `run-postgres`
+# code blocks in the doc
+GLOBAL_CONN = None
 
 if __name__ == "__main__":
-    # We don't open the global connection right away
-    # Instead we wait until we find a least one `run-postgres`
-    # code blocks in the doc
-    pf.run_filter(pf.yaml_filter, tag='run-postgres', function=action)
+    pf.run_filter(pf.yaml_filter, tag=FILTER_NAME, function=action)
     if GLOBAL_CONN:
         GLOBAL_CONN.close()

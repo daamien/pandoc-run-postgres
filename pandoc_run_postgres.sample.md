@@ -1,4 +1,10 @@
-# pandoc-run-postgres 
+---
+run-sql:
+  - show_query: True
+  - port: 6543
+...
+
+# pandoc-run-postgres
 
 
 ## Basic Usage
