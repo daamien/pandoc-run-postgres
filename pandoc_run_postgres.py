@@ -104,6 +104,7 @@ def action(options, data, element, doc):
     ## /!\ do not confuse with `options`
     ##
     params={}
+    params['autocommit']=get_bool_option(element, doc,"autocommit", 'True')
     params['classes']=get_list_option(element, doc,"class", 'sql',' ')
     params['parse_query']=get_bool_option(element, doc,"parse_query", 'True')
     params['show_query']=get_bool_option(element, doc,"show_query", 'True')
@@ -132,7 +133,7 @@ def action(options, data, element, doc):
         if conninfo:
             local_conn = psycopg.connect(   conninfo,
                                             application_name=FILTER_NAME,
-                                            autocommit=True)
+                                            autocommit=params['autocommit'])
             conn = local_conn
 
         ## else use the global connection
@@ -143,7 +144,7 @@ def action(options, data, element, doc):
                 conninfo=get_conninfo(None,doc)
                 GLOBAL_CONN = psycopg.connect(  conninfo,
                                                 application_name=FILTER_NAME,
-                                                autocommit=True)
+                                                autocommit=params['autocommit'])
             conn = GLOBAL_CONN
 
         ##
