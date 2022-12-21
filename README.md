@@ -53,7 +53,7 @@ pip install pandoc-run-postgres
 
 ## Configuration
 
-See examples in `pandoc_run_postgres.sample.md`.
+See examples in `sample.md`.
 
 
 ## Similar projects

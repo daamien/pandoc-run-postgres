@@ -1,6 +1,6 @@
 [project]
 name = "pandoc-run-postgres"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
   { name="Damien Clochard", email="damien.clochard@dalibo.com" },
 ]
@@ -22,3 +22,10 @@ dependencies = [
 [project.urls]
 "Homepage" = "https://github.com/daamien/pandoc-run-postgres"
 "Bug Tracker" = "https://github.com/daamien/pandoc-run-postgres/issues"
+
+
+[project.scripts]
+pandoc-run-postgres = 'pandoc_run_postgres:main'
+
+[tool.setuptools]
+py-modules = ["pandoc_run_postgres"]
