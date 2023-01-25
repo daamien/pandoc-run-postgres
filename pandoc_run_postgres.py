@@ -174,7 +174,12 @@ FILTER_NAME = 'run-postgres'
 # code blocks in the doc
 GLOBAL_CONN = None
 
-if __name__ == "__main__":
+def main(doc=None):
+    """ Panflute setup
+    """
     pf.run_filter(pf.yaml_filter, tag=FILTER_NAME, function=action)
     if GLOBAL_CONN:
         GLOBAL_CONN.close()
+
+if __name__ == '__main__':
+    main()
