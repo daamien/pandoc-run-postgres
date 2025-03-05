@@ -1,0 +1,23 @@
+---
+services:
+  anon-pandoc:
+    image: dalibo/pandocker:latest
+    environment:
+      - PGHOST=runbooks-anon-pg-1
+      - PGPASSWORD=CHANGEME
+      - PGUSER=postgres
+      - PGPORT=65432
+      - PGDATABASE=postgres
+    volumes:
+      - ..:/pandoc
+    entrypoint: /bin/bash
+    tty: true
+
+  anon-pg:
+    image: postgres:17
+    environment:
+      - POSTGRES_PASSWORD=CHANGEME
+      - PGUSER=postgres
+      - PGPORT=65432
+    expose:
+      - 65432

@@ -1,6 +1,6 @@
 [project]
 name = "pandoc-run-postgres"
-version = "0.0.4"
+version = "0.1.0"
 authors = [
   { name="Damien Clochard", email="damien.clochard@dalibo.com" },
 ]
@@ -16,7 +16,6 @@ classifiers = [
 dependencies = [
     "panflute",
     "psycopg[binary]",
-    "sqlparse"
 ]
 
 [project.urls]
