@@ -1,3 +1,2 @@
 panflute
 psycopg[binary]
-sqlparse

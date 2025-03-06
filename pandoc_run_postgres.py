@@ -5,7 +5,6 @@ Execute SQL queries inside a Markdown document
 """
 
 import psycopg
-import sqlparse
 import panflute as pf
 
 
@@ -89,6 +88,18 @@ def get_panflute_table(conn, query, show_result):
     return None
 
 
+def action_on_sql(options, data, element, doc):
+    """
+    If an `sql` code block has the `.run-postgres` class,
+    treat it like a `run-postgres` code block
+
+    This is is useful because the parsing of `sql` is way better
+    """
+    if get_bool_option(element, doc,"run-postgres", 'False'):
+        return action(options,data,element, doc)
+
+    return None
+
 def action(options, data, element, doc):
     """
     For each `run-postgres` code block:
@@ -96,7 +107,6 @@ def action(options, data, element, doc):
         * 2- run the query
         * 3- output the result as a table
     """
-
     output = []
 
     ##
@@ -117,9 +127,8 @@ def action(options, data, element, doc):
     ## Step 1 : Write the Query
     ##
     if params['show_query']:
-        if params['parse_query']:
-            query = sqlparse.format(query, reindent=True, keyword_case="upper")
-        output.append(pf.CodeBlock(query,classes=params['classes']))
+        element.classes = params['classes']
+        output.append(element)
 
     ##
     ## Step 2 : Execute the Query and display the result
@@ -177,7 +186,21 @@ GLOBAL_CONN = None
 def main(doc=None):
     """ Panflute setup
     """
-    pf.run_filter(pf.yaml_filter, tag=FILTER_NAME, function=action)
+
+
+    # Execute the `run-postgres` code block
+    #pf.run_filter(pf.yaml_filter, tag=tag, function=action)
+    # to apply multiple functions to separate classes, we can use the tags argument,
+    # which receives a dict of tag: function pairs
+    tags={}
+    tags['run-postgres'] = action
+    tags['sql'] = action_on_sql
+    pf.run_filter(pf.yaml_filter,tags=tags)
+
+    # Execute the `sql` code block (if the `run-postgres` class is enabled)
+    #pf.run_filter(pf.yaml_filter, tag='sql', function=action_on_sql)
+
+    # Close the global connexion
     if GLOBAL_CONN:
         GLOBAL_CONN.close()
 
